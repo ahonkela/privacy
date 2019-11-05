@@ -46,9 +46,6 @@ flags.DEFINE_float('noise_multiplier', 2.0,
 flags.DEFINE_float('l2_norm_clip', 1.0, 'Clipping norm')
 flags.DEFINE_integer('batch_size', 64, 'Batch size')
 flags.DEFINE_integer('epochs', 2, 'Number of epochs')
-flags.DEFINE_integer(
-    'microbatches', 64, 'Number of microbatches '
-    '(must evenly divide batch_size)')
 flags.DEFINE_integer('training_data_size', 2000, 'Training data size')
 flags.DEFINE_integer('test_data_size', 2000, 'Test data size')
 flags.DEFINE_integer('input_dimension', 5, 'Input dimension')
@@ -100,10 +97,12 @@ def lr_model_fn(features, labels, mode):
       # available in dp_optimizer. Most optimizers inheriting from
       # tf.train.Optimizer should be wrappable in differentially private
       # counterparts by calling dp_optimizer.optimizer_from_args().
+      # Setting num_microbatches to None is necessary for DP and
+      # per-example gradients
       optimizer = dp_optimizer.DPAdamGaussianOptimizer(
           l2_norm_clip=FLAGS.l2_norm_clip,
           noise_multiplier=FLAGS.noise_multiplier,
-          num_microbatches=FLAGS.microbatches,
+          num_microbatches=None,
           ledger=ledger,
           learning_rate=FLAGS.learning_rate)
       training_hooks = [
@@ -159,8 +158,6 @@ def generate_data():
 
 def main(unused_argv):
   tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-  if FLAGS.dpsgd and FLAGS.batch_size % FLAGS.microbatches != 0:
-    raise ValueError('Number of microbatches should divide evenly batch_size')
 
   # Load training and test data.
   train_data, train_labels, test_data, test_labels = generate_data()
