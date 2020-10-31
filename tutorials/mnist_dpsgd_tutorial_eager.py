@@ -20,14 +20,14 @@ from absl import app
 from absl import flags
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from tensorflow_privacy.privacy.analysis.rdp_accountant import compute_rdp
 from tensorflow_privacy.privacy.analysis.rdp_accountant import get_privacy_spent
 from tensorflow_privacy.privacy.optimizers.dp_optimizer import DPGradientDescentGaussianOptimizer
 
-GradientDescentOptimizer = tf.compat.v1.train.GradientDescentOptimizer
-tf.compat.v1.enable_eager_execution()
+GradientDescentOptimizer = tf.train.GradientDescentOptimizer
+tf.enable_eager_execution()
 
 flags.DEFINE_boolean('dpsgd', True, 'If True, train with DP-SGD. If False, '
                      'train with vanilla SGD.')

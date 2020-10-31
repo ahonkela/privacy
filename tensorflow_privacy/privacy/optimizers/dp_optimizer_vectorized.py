@@ -1,4 +1,4 @@
-# Copyright 2019, The TensorFlow Authors.
+# Copyright 2020, The TensorFlow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,13 +19,13 @@ from __future__ import print_function
 
 from absl import logging
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
-AdagradOptimizer = tf.compat.v1.train.AdagradOptimizer
-AdamOptimizer = tf.compat.v1.train.AdamOptimizer
-GradientDescentOptimizer = tf.compat.v1.train.GradientDescentOptimizer
-parent_code = tf.compat.v1.train.Optimizer.compute_gradients.__code__
-GATE_OP = tf.compat.v1.train.Optimizer.GATE_OP  # pylint: disable=invalid-name
+AdagradOptimizer = tf.train.AdagradOptimizer
+AdamOptimizer = tf.train.AdamOptimizer
+GradientDescentOptimizer = tf.train.GradientDescentOptimizer
+parent_code = tf.train.Optimizer.compute_gradients.__code__
+GATE_OP = tf.train.Optimizer.GATE_OP  # pylint: disable=invalid-name
 
 
 def make_vectorized_optimizer_class(cls):
@@ -90,8 +90,8 @@ def make_vectorized_optimizer_class(cls):
 
         if var_list is None:
           var_list = (
-              tf.compat.v1.trainable_variables() + tf.compat.v1.get_collection(
-                  tf.compat.v1.GraphKeys.TRAINABLE_RESOURCE_VARIABLES))
+              tf.trainable_variables() + tf.get_collection(
+                  tf.GraphKeys.TRAINABLE_RESOURCE_VARIABLES))
 
         def process_microbatch(microbatch_loss):
           """Compute clipped grads for one microbatch."""

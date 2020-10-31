@@ -20,9 +20,9 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
+import distutils
 
-from distutils.version import LooseVersion
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from tensorflow_privacy.privacy.dp_query import dp_query
 from tensorflow_privacy.privacy.dp_query import normalized_query
@@ -64,10 +64,6 @@ class GaussianSumQuery(dp_query.SumAggregationDPQuery):
   def derive_sample_params(self, global_state):
     return global_state.l2_norm_clip
 
-  def initial_sample_state(self, template):
-    return tf.nest.map_structure(
-        dp_query.zeros_like, template)
-
   def preprocess_record_impl(self, params, record):
     """Clips the l2 norm, returning the clipped record and the l2 norm.
 
@@ -91,16 +87,18 @@ class GaussianSumQuery(dp_query.SumAggregationDPQuery):
 
   def get_noised_result(self, sample_state, global_state):
     """See base class."""
-    if LooseVersion(tf.__version__) < LooseVersion('2.0.0'):
+    if distutils.version.LooseVersion(
+        tf.__version__) < distutils.version.LooseVersion('2.0.0'):
+
       def add_noise(v):
         return v + tf.random.normal(
-            tf.shape(input=v), stddev=global_state.stddev)
+            tf.shape(input=v), stddev=global_state.stddev, dtype=v.dtype)
     else:
-      random_normal = tf.compat.v1.random_normal_initializer(
+      random_normal = tf.random_normal_initializer(
           stddev=global_state.stddev)
 
       def add_noise(v):
-        return v + random_normal(tf.shape(input=v))
+        return v + tf.cast(random_normal(tf.shape(input=v)), dtype=v.dtype)
 
     if self._ledger:
       dependencies = [

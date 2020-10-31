@@ -1,4 +1,4 @@
-# Copyright 2019, The TensorFlow Privacy Authors.
+# Copyright 2020, The TensorFlow Privacy Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,6 +19,8 @@ from __future__ import print_function
 
 import sys
 
+from tensorflow_privacy.version import __version__  # pylint: disable=g-bad-import-order
+
 # pylint: disable=g-import-not-at-top
 
 if hasattr(sys, 'skip_tf_privacy_import'):  # Useful for standalone scripts.
@@ -30,12 +32,15 @@ else:
   from tensorflow_privacy.privacy.analysis.privacy_ledger import SampleEntry
 
   from tensorflow_privacy.privacy.dp_query.dp_query import DPQuery
+  from tensorflow_privacy.privacy.dp_query.dp_query import SumAggregationDPQuery
   from tensorflow_privacy.privacy.dp_query.gaussian_query import GaussianAverageQuery
   from tensorflow_privacy.privacy.dp_query.gaussian_query import GaussianSumQuery
   from tensorflow_privacy.privacy.dp_query.nested_query import NestedQuery
   from tensorflow_privacy.privacy.dp_query.no_privacy_query import NoPrivacyAverageQuery
   from tensorflow_privacy.privacy.dp_query.no_privacy_query import NoPrivacySumQuery
   from tensorflow_privacy.privacy.dp_query.normalized_query import NormalizedQuery
+  from tensorflow_privacy.privacy.dp_query.quantile_estimator_query import QuantileEstimatorQuery
+  from tensorflow_privacy.privacy.dp_query.quantile_estimator_query import NoPrivacyQuantileEstimatorQuery
   from tensorflow_privacy.privacy.dp_query.quantile_adaptive_clip_sum_query import QuantileAdaptiveClipSumQuery
   from tensorflow_privacy.privacy.dp_query.quantile_adaptive_clip_sum_query import QuantileAdaptiveClipAverageQuery
 

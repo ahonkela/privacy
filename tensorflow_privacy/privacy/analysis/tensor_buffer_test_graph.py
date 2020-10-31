@@ -17,7 +17,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from tensorflow_privacy.privacy.analysis import tensor_buffer
 
@@ -38,7 +38,7 @@ class TensorBufferTest(tf.test.TestCase):
           values = my_buffer.values
           current_size = my_buffer.current_size
           capacity = my_buffer.capacity
-      self.evaluate(tf.compat.v1.global_variables_initializer())
+      self.evaluate(tf.global_variables_initializer())
 
       v, cs, cap = sess.run([values, current_size, capacity])
       self.assertAllEqual(v, [value1, value2])
@@ -60,7 +60,7 @@ class TensorBufferTest(tf.test.TestCase):
             values = my_buffer.values
             current_size = my_buffer.current_size
             capacity = my_buffer.capacity
-      self.evaluate(tf.compat.v1.global_variables_initializer())
+      self.evaluate(tf.global_variables_initializer())
 
       v, cs, cap = sess.run([values, current_size, capacity])
       self.assertAllEqual(v, [value1, value2, value3])
