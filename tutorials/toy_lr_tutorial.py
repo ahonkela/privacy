@@ -1,4 +1,4 @@
-# Copyright 2018, The TensorFlow Authors.
+# Copyright 2020, The TensorFlow Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 #
 # Modified to use logistic regression instead of CNN
-# and synthetic data instead of MNIST by Antti Honkela, 2019
+# and synthetic data instead of MNIST by Antti Honkela, 2019-2020
 
 """Training a logistic regression model with differentially private SGD optimizer."""
 
@@ -21,19 +21,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import time
+
 from absl import app
 from absl import flags
+from absl import logging
 
 import numpy as np
 import numpy.random as npr
 import tensorflow as tf
 
-from tensorflow_privacy.privacy.analysis import privacy_ledger
-from tensorflow_privacy.privacy.analysis.rdp_accountant import compute_rdp_from_ledger
-from tensorflow_privacy.privacy.analysis.rdp_accountant import get_privacy_spent
-from tensorflow_privacy.privacy.optimizers import dp_optimizer
+import tensorflow.compat.v1 as tf
 
-AdamOptimizer = tf.compat.v1.train.AdamOptimizer
+from tensorflow_privacy.privacy.analysis import compute_dp_sgd_privacy_lib
+from tensorflow_privacy.privacy.optimizers import dp_optimizer
 
 FLAGS = flags.FLAGS
 
@@ -52,27 +53,6 @@ flags.DEFINE_integer('input_dimension', 5, 'Input dimension')
 flags.DEFINE_string('model_dir', None, 'Model directory')
 
 
-class EpsilonPrintingTrainingHook(tf.estimator.SessionRunHook):
-  """Training hook to print current value of epsilon after an epoch."""
-
-  def __init__(self, ledger):
-    """Initalizes the EpsilonPrintingTrainingHook.
-
-    Args:
-      ledger: The privacy ledger.
-    """
-    self._samples, self._queries = ledger.get_unformatted_ledger()
-
-  def end(self, session):
-    orders = [1 + x / 10.0 for x in range(1, 100)] + list(range(12, 64))
-    samples = session.run(self._samples)
-    queries = session.run(self._queries)
-    formatted_ledger = privacy_ledger.format_ledger(samples, queries)
-    rdp = compute_rdp_from_ledger(formatted_ledger, orders)
-    eps = get_privacy_spent(orders, rdp, target_delta=1e-5)[0]
-    print('For delta=1e-5, the current epsilon is: %.2f' % eps)
-
-
 def lr_model_fn(features, labels, mode):
   """Model function for a LR."""
 
@@ -89,53 +69,43 @@ def lr_model_fn(features, labels, mode):
   if mode == tf.estimator.ModeKeys.TRAIN:
 
     if FLAGS.dpsgd:
-      ledger = privacy_ledger.PrivacyLedger(
-          population_size=FLAGS.training_data_size,
-          selection_probability=(FLAGS.batch_size / FLAGS.training_data_size))
-
-      # Use DP version of AdamOptimizer. Other optimizers are
+      # Use DP version of GradientDescentOptimizer. Other optimizers are
       # available in dp_optimizer. Most optimizers inheriting from
       # tf.train.Optimizer should be wrappable in differentially private
       # counterparts by calling dp_optimizer.optimizer_from_args().
-      # Setting num_microbatches to None is necessary for DP and
-      # per-example gradients
-      optimizer = dp_optimizer.DPAdamGaussianOptimizer(
+      optimizer = dp_optimizer.DPGradientDescentGaussianOptimizer(
           l2_norm_clip=FLAGS.l2_norm_clip,
           noise_multiplier=FLAGS.noise_multiplier,
           num_microbatches=None,
-          ledger=ledger,
           learning_rate=FLAGS.learning_rate)
-      training_hooks = [
-          EpsilonPrintingTrainingHook(ledger)
-      ]
       opt_loss = vector_loss
     else:
-      optimizer = AdamOptimizer(learning_rate=FLAGS.learning_rate)
-      training_hooks = []
+      optimizer = tf.train.GradientDescentOptimizer(
+          learning_rate=FLAGS.learning_rate)
       opt_loss = scalar_loss
-    global_step = tf.compat.v1.train.get_global_step()
+
+    global_step = tf.train.get_global_step()
     train_op = optimizer.minimize(loss=opt_loss, global_step=global_step)
+
     # In the following, we pass the mean of the loss (scalar_loss) rather than
     # the vector_loss because tf.estimator requires a scalar loss. This is only
     # used for evaluation and debugging by tf.estimator. The actual loss being
     # minimized is opt_loss defined above and passed to optimizer.minimize().
-    return tf.estimator.EstimatorSpec(mode=mode,
-                                      loss=scalar_loss,
-                                      train_op=train_op,
-                                      training_hooks=training_hooks)
+    return tf.estimator.EstimatorSpec(
+        mode=mode, loss=scalar_loss, train_op=train_op)
 
   # Add evaluation metrics (for EVAL mode).
   elif mode == tf.estimator.ModeKeys.EVAL:
     eval_metric_ops = {
         'accuracy':
-            tf.compat.v1.metrics.accuracy(
+            tf.metrics.accuracy(
                 labels=labels,
                 predictions=tf.argmax(input=logits, axis=1))
     }
-
     return tf.estimator.EstimatorSpec(mode=mode,
                                       loss=scalar_loss,
                                       eval_metric_ops=eval_metric_ops)
+
 
 def generate_data():
   npr.seed(4242)
@@ -156,8 +126,10 @@ def generate_data():
   test_Y = np.array(test_Y, dtype=np.int32)
   return train_X, train_Y, test_X, test_Y
 
+
 def main(unused_argv):
-  tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+  logging.set_verbosity(logging.INFO)
+  tf.logging.set_verbosity(tf.logging.ERROR)
 
   # Load training and test data.
   train_data, train_labels, test_data, test_labels = generate_data()
@@ -167,13 +139,13 @@ def main(unused_argv):
                                          model_dir=FLAGS.model_dir)
 
   # Create tf.Estimator input functions for the training and test data.
-  train_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
+  train_input_fn = tf.estimator.inputs.numpy_input_fn(
       x={'x': train_data},
       y=train_labels,
       batch_size=FLAGS.batch_size,
       num_epochs=FLAGS.epochs,
       shuffle=True)
-  eval_input_fn = tf.compat.v1.estimator.inputs.numpy_input_fn(
+  eval_input_fn = tf.estimator.inputs.numpy_input_fn(
       x={'x': test_data},
       y=test_labels,
       num_epochs=1,
@@ -182,13 +154,30 @@ def main(unused_argv):
   # Training loop.
   steps_per_epoch = FLAGS.training_data_size // FLAGS.batch_size / 10
   for epoch in range(1, 10*FLAGS.epochs + 1):
+    start_time = time.time()
     # Train the model for one epoch.
-    lr_classifier.train(input_fn=train_input_fn, steps=steps_per_epoch)
+    lr_classifier.train(
+        input_fn=train_input_fn, steps=steps_per_epoch)
+    end_time = time.time()
+    logging.info('Epoch %.1f time in seconds: %.2f', epoch/10, end_time - start_time)
 
     # Evaluate the model and print results
-    eval_results = lr_classifier.evaluate(input_fn=eval_input_fn)
+    eval_results = lr_classifier.evaluate(
+        input_fn=eval_input_fn)
     test_accuracy = eval_results['accuracy']
     print('Test accuracy after %.1f epochs is: %.3f' % (epoch/10, test_accuracy))
+
+    # Compute the privacy budget expended.
+    if FLAGS.dpsgd:
+      if FLAGS.noise_multiplier > 0.0:
+        eps, _ = compute_dp_sgd_privacy_lib.compute_dp_sgd_privacy(
+            FLAGS.training_data_size, FLAGS.batch_size, FLAGS.noise_multiplier, epoch/10, 1e-5)
+        print('For delta=1e-5, the current epsilon is: %.2f' % eps)
+      else:
+        print('Trained with DP-SGD but with zero noise.')
+    else:
+      print('Trained with vanilla non-private SGD optimizer')
+
 
 if __name__ == '__main__':
   app.run(main)
